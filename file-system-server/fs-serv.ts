@@ -8,6 +8,7 @@ declare const process: {
     env: { [key: string]: string | undefined };
     cwd(): string;
     exit(code?: number): never;
+    argv: string[];
 };
 
 import * as http from 'http';
@@ -19,9 +20,15 @@ import * as dotenv from 'dotenv';
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const PORT = process.env.FS_SERVER_PORT || 4040;
+
+// --- NEW: Allow command-line override for root directory ---
+// Usage: node server.js [rootDir]
+const cliRootArg = process.argv[2];
+const effectiveRoot = cliRootArg || process.env.FS_ROOT_DIR;
+
 // Ensure FS_ROOT_DIR is an absolute path for security.
-const FS_ROOT_DIR = process.env.FS_ROOT_DIR
-    ? path.resolve(process.env.FS_ROOT_DIR)
+const FS_ROOT_DIR = effectiveRoot
+    ? path.resolve(effectiveRoot)
     : path.resolve(process.cwd(), 'fs_root');
 
 interface RequestModel {
@@ -34,7 +41,7 @@ interface RequestModel {
     toAlias?: string;
     toPath?: string[];
     destPath?: string[];
-    items?: { name: string, type: 'file' | 'folder' }[];
+    items?: { name: string; type: 'file' | 'folder' }[];
 }
 
 /**

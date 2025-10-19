@@ -1,8 +1,8 @@
 // To run this server, you will need Node.js installed.
 // Execute the following command in your terminal:
-// node serv/image-serv.js
+// node serv/image-serv.js [imageRootDir]
 // Note: If you have a TypeScript runner like ts-node, you can use:
-// ts-node serv/image-serv.ts
+// ts-node serv/image-serv.ts [imageRootDir]
 // For this environment, we will assume it's compiled to JS and run.
 
 import * as http from 'http';
@@ -15,7 +15,17 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 const PORT = process.env.IMAGE_SERVER_PORT || 8081;
-const IMAGE_ROOT_DIR = process.env.IMAGE_ROOT_DIR;
+
+// --- NEW: Allow command-line override for image root directory ---
+// Usage: node serv/image-serv.js [imageRootDir]
+const cliRootArg = process.argv[2];
+const effectiveRoot = cliRootArg || process.env.IMAGE_ROOT_DIR;
+
+// Ensure IMAGE_ROOT_DIR is an absolute path for security and consistency.
+const IMAGE_ROOT_DIR = effectiveRoot
+  ? path.resolve(effectiveRoot)
+  : path.resolve(process.cwd(), 'images'); // fallback default
+
 const PREFERRED_EXTENSIONS = ['.svg', '.png', '.jpg', '.jpeg', '.gif'];
 const UI_ICON_NAMES = ['Users', 'Home', 'Desktop', 'Documents', 'resources'];
 
@@ -38,23 +48,21 @@ const serveStaticFile = async (baseName: string, res: http.ServerResponse): Prom
     try {
       const fileName = `${baseName}${ext}`;
       const filePath = path.join(IMAGE_ROOT_DIR, fileName);
-      
+
       await fs.access(filePath); // Check for existence
 
       const fileContent = await fs.readFile(filePath);
       const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-      
+
       res.writeHead(200, { 'Content-Type': contentType });
       res.end(fileContent);
       return true; // File found and served
-
-    } catch (error) {
-      // File with this extension doesn't exist, try next extension
+    } catch {
+      // Try next extension
     }
   }
   return false; // No matching file found
 };
-
 
 const server = http.createServer(async (req, res) => {
   console.log(`[${new Date().toISOString()}] Request: ${req.method} ${req.url}`);
@@ -103,9 +111,5 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Image server listening on http://localhost:${PORT}`);
-  if (IMAGE_ROOT_DIR) {
-    console.log(`Serving static images from: ${IMAGE_ROOT_DIR}`);
-  } else {
-    console.log('IMAGE_ROOT_DIR not set. No images will be served.');
-  }
+  console.log(`Serving static images from: ${IMAGE_ROOT_DIR}`);
 });
