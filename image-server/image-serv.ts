@@ -32,6 +32,7 @@ const FOLDER_LOCATIONS = [
   // path.join(IMAGE_ROOT_DIR, 'ui', "neon"),
   path.join(IMAGE_ROOT_DIR, 'device'),
   path.join(IMAGE_ROOT_DIR, 'logo'),
+  path.join(IMAGE_ROOT_DIR, 'ui', 'shared'),
   path.join(IMAGE_ROOT_DIR, 'ui', '3d-fluency')
   // Add more folder locations here as needed
 ];
