@@ -18,7 +18,7 @@ app.get('/health', (req: Request, res: Response) => {
 });
 
 // Handle all other routes with 404
-app.use('*', (req: Request, res: Response) => {
+app.use((req: Request, res: Response) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
