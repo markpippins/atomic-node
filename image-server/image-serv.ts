@@ -102,7 +102,18 @@ const serveStaticFile = async (baseName: string, res: http.ServerResponse, searc
 
 const server = http.createServer(async (req, res) => {
   console.log(`[${new Date().toISOString()}] Request: ${req.method} ${req.url}`);
+  
+  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+
+  // Handle preflight OPTIONS request
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204); // No content
+    res.end();
+    return;
+  }
 
   const parsedUrl = url.parse(req.url ?? '', true);
   const pathParts = (parsedUrl.pathname ?? '').split('/').filter(p => p);
