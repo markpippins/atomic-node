@@ -9,7 +9,7 @@ declare const process: {
     cwd(): string;
     exit(code?: number): never;
     argv: string[];
-};
+};\
 
 import * as http from 'http';
 import * as fs from 'fs/promises';
@@ -69,6 +69,34 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'OPTIONS') {
         res.writeHead(204);
         res.end();
+        return;
+    }
+
+    // Handle health check endpoint
+    if (req.url === '/health' && req.method === 'GET') {
+        try {
+            // Check if the file system root directory is accessible
+            await fs.access(FS_ROOT_DIR);
+            
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                status: 'UP',
+                service: 'file-system-server',
+                timestamp: new Date().toISOString(),
+                details: {
+                    fsRootDir: FS_ROOT_DIR,
+                    port: PORT
+                }
+            }));
+        } catch (error) {
+            res.writeHead(503, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+                status: 'DOWN',
+                service: 'file-system-server',
+                timestamp: new Date().toISOString(),
+                error: 'File system root directory not accessible'
+            }));
+        }
         return;
     }
 

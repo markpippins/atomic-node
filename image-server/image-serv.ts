@@ -118,6 +118,35 @@ const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url ?? '', true);
   const pathParts = (parsedUrl.pathname ?? '').split('/').filter(p => p);
 
+  // Handle health check endpoint
+  if (req.url === '/health' && req.method === 'GET') {
+    try {
+      // Check if the image root directory is accessible
+      await fs.access(IMAGE_ROOT_DIR);
+      
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: 'UP',
+        service: 'image-server',
+        timestamp: new Date().toISOString(),
+        details: {
+          imageRootDir: IMAGE_ROOT_DIR,
+          port: PORT,
+          searchLocations: FOLDER_LOCATIONS.length
+        }
+      }));
+    } catch (error) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: 'DOWN',
+        service: 'image-server',
+        timestamp: new Date().toISOString(),
+        error: 'Image root directory not accessible'
+      }));
+    }
+    return;
+  }
+
   // Handle default route (no prefix) - search through all folder locations
   if (pathParts.length === 0) {
     if (req.url === '/' || req.url === '/favicon.ico') {
