@@ -20,7 +20,7 @@ The Broker Service Proxy receives requests in the same format as the broker gate
 
 ## Environment Variables
 
-- `PORT` - Port for the proxy server to listen on (default: 3333)
+- `BROKER_PROXY_PORT` - Port for the proxy server to listen on (default: 3333)
 - `HOST` - Host for the proxy server to bind to (default: 0.0.0.0)
 - `BROKER_GATEWAY_URL` - URL of the broker gateway to forward requests to (default: http://localhost:8080)
 
