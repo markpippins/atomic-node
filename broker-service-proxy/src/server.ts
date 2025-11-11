@@ -23,7 +23,7 @@ app.use((req: Request, res: Response) => {
 });
 
 // Get port from environment variable or default to 3333
-const port = parseInt(process.env.PORT || '3333', 10);
+const port = parseInt(process.env.BROKER_PROXY_PORT || '3333', 10);
 const host = process.env.HOST || '0.0.0.0';
 
 app.listen(port, host, () => {
