@@ -9,7 +9,7 @@ declare const process: {
     cwd(): string;
     exit(code?: number): never;
     argv: string[];
-};\
+};
 
 import * as http from 'http';
 import * as fs from 'fs/promises';
