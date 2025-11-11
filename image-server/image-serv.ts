@@ -23,7 +23,7 @@ const effectiveRoot = cliRootArg || process.env.IMAGE_ROOT_DIR;
 
 // Ensure IMAGE_ROOT_DIR is an absolute path for security and consistency.
 const IMAGE_ROOT_DIR = effectiveRoot
-  ? path.resolve(effectiveRoot)
+  ? path.resolve(effectiveRoot.trim())
   : path.resolve(process.cwd(), 'images'); // fallback default
 
 // Array of folder locations to search in
@@ -33,7 +33,11 @@ const FOLDER_LOCATIONS = [
   path.join(IMAGE_ROOT_DIR, 'device'),
   path.join(IMAGE_ROOT_DIR, 'logo'),
   path.join(IMAGE_ROOT_DIR, 'ui', 'shared'),
-  path.join(IMAGE_ROOT_DIR, 'ui', '3d-fluency')
+  path.join(IMAGE_ROOT_DIR, 'ui', '3d-fluency'),
+  path.join(IMAGE_ROOT_DIR, 'ui', 'ui', '3d-fluency'), // additional location based on actual structure
+  path.join(IMAGE_ROOT_DIR, 'ui', 'ui', 'shared'),
+  path.join(IMAGE_ROOT_DIR, 'ui', 'ui', 'neon'),
+  path.join(IMAGE_ROOT_DIR, 'ui', 'ui', 'plastina-3d')
   // Add more folder locations here as needed
 ];
 
@@ -59,8 +63,8 @@ const serveStaticFile = async (baseName: string, res: http.ServerResponse, searc
   if (hasExtension) {
     // If it already has an extension, look for that specific file
     for (const location of searchLocations) {
+      const filePath = path.join(location, baseName);
       try {
-        const filePath = path.join(location, baseName);
         await fs.access(filePath); // Check for existence
 
         // Determine content type from extension
@@ -68,31 +72,40 @@ const serveStaticFile = async (baseName: string, res: http.ServerResponse, searc
         const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
         const fileContent = await fs.readFile(filePath);
-        res.writeHead(200, { 'Content-Type': contentType });
+        res.writeHead(200, { 
+          'Content-Type': contentType,
+          'Content-Length': fileContent.length,
+          'Cache-Control': 'public, max-age=3600' // Cache for 1 hour
+        });
         res.end(fileContent);
         return true; // File found and served
-      } catch {
-        // Try next location
+      } catch (error) {
+        console.error(`Error serving file ${filePath}:`, error);
+        // Continue to try next location
       }
     }
   } else {
     // If it doesn't have an extension, try adding all supported extensions
     for (const location of searchLocations) {
       for (const ext of PREFERRED_EXTENSIONS) {
+        const fileName = `${baseName}${ext}`;
+        const filePath = path.join(location, fileName);
         try {
-          const fileName = `${baseName}${ext}`;
-          const filePath = path.join(location, fileName);
-
           await fs.access(filePath); // Check for existence
 
           const fileContent = await fs.readFile(filePath);
           const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
-          res.writeHead(200, { 'Content-Type': contentType });
+          res.writeHead(200, { 
+            'Content-Type': contentType,
+            'Content-Length': fileContent.length,
+            'Cache-Control': 'public, max-age=3600' // Cache for 1 hour
+          });
           res.end(fileContent);
           return true; // File found and served
-        } catch {
-          // Try next extension/location
+        } catch (error) {
+          console.error(`Error serving file ${filePath}:`, error);
+          // Continue to try next extension/location
         }
       }
     }
@@ -103,10 +116,12 @@ const serveStaticFile = async (baseName: string, res: http.ServerResponse, searc
 const server = http.createServer(async (req, res) => {
   console.log(`[${new Date().toISOString()}] Request: ${req.method} ${req.url}`);
   
-  // CORS headers
+  // CORS headers - IMPORTANT: Set these for all responses, including errors
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Range');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
+  // Note: Access-Control-Allow-Credentials is omitted when using wildcard origin (*)
 
   // Handle preflight OPTIONS request
   if (req.method === 'OPTIONS') {
@@ -141,7 +156,7 @@ const server = http.createServer(async (req, res) => {
         status: 'DOWN',
         service: 'image-server',
         timestamp: new Date().toISOString(),
-        error: 'Image root directory not accessible'
+        error: error instanceof Error ? error.message : 'Image root directory not accessible'
       }));
     }
     return;
@@ -150,8 +165,8 @@ const server = http.createServer(async (req, res) => {
   // Handle default route (no prefix) - search through all folder locations
   if (pathParts.length === 0) {
     if (req.url === '/' || req.url === '/favicon.ico') {
-      res.writeHead(200, { 'Content-Type': 'text/plain' });
-      res.end('Image Server is running');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'Image Server is running' }));
       return;
     }
   }
@@ -187,12 +202,13 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (!fileServed) {
-      res.writeHead(404, { 'Content-Type': 'text/plain' });
-      res.end('Not Found');
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Not Found', path: req.url }));
     }
   } catch (e) {
     console.error('Error processing request:', e);
-    res.writeHead(500).end('Server Error');
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Server Error', message: (e as Error).message }));
   }
 });
 
