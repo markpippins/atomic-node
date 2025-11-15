@@ -1,8 +1,16 @@
 import express, { Request, Response } from 'express';
+import cors from 'cors';
 import { BrokerProxyController } from './controllers/BrokerProxyController';
 
 const app = express();
 const controller = new BrokerProxyController();
+
+// CORS middleware - allow requests from any origin during development
+app.use(cors({
+  origin: '*', // In production, replace with specific origins
+  credentials: true,
+  optionsSuccessStatus: 200
+}));
 
 // Middleware to parse JSON
 app.use(express.json());
