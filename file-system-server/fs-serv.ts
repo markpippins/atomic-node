@@ -199,6 +199,38 @@ const server = http.createServer(async (req, res) => {
                     responseData = { moved: sourcePath, to: destPath };
                     break;
                 }
+                case 'hasfile': {
+                    if (!requestData.filename) {
+                        throw new Error('Filename is required for hasfile operation');
+                    }
+                    const targetPath = ensurePathExists(userRoot, [...requestData.path, requestData.filename]);
+                    try {
+                        await fs.access(targetPath, fs.constants.F_OK);
+                        // If access doesn't throw an error, the file exists
+                        responseData = { exists: true, path: targetPath, type: 'file' };
+                    } catch {
+                        // If access throws an error, the file doesn't exist
+                        responseData = { exists: false, path: targetPath, type: 'file' };
+                    }
+                    break;
+                }
+                case 'hasfolder': {
+                    if (!requestData.filename) {
+                        throw new Error('Folder name is required for hasfolder operation');
+                    }
+                    const targetPath = ensurePathExists(userRoot, [...requestData.path, requestData.filename]);
+                    try {
+                        const stats = await fs.stat(targetPath);
+                        if (stats.isDirectory()) {
+                            responseData = { exists: true, path: targetPath, type: 'directory' };
+                        } else {
+                            responseData = { exists: false, path: targetPath, type: 'directory' };
+                        }
+                    } catch {
+                        responseData = { exists: false, path: targetPath, type: 'directory' };
+                    }
+                    break;
+                }
                 default:
                     throw new Error(`Unknown operation: ${requestData.operation}`);
             }
