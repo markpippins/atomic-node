@@ -15,6 +15,29 @@ import * as http from 'http';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
+import * as winston from 'winston';
+
+// Configure logging
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    winston.format.splat(),
+    winston.format.json()
+  ),
+  defaultMeta: { service: 'file-system-server' },
+  transports: [
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.printf(
+          (info) => `${info.timestamp} ${info.level} [${info.service}] ${info.message}`
+        )
+      ),
+    }),
+  ],
+});
 
 // Load environment variables from .env file in the project root
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
@@ -61,12 +84,20 @@ function ensurePathExists(rootDir: string, parts: string[]): string {
 }
 
 const server = http.createServer(async (req, res) => {
+    // Log incoming requests
+    logger.info(`Incoming request`, {
+        method: req.method,
+        url: req.url,
+        headers: req.headers
+    });
+
     // Handle CORS pre-flight requests and set CORS headers for all responses.
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
     if (req.method === 'OPTIONS') {
+        logger.debug('Handling CORS preflight request');
         res.writeHead(204);
         res.end();
         return;
@@ -74,10 +105,11 @@ const server = http.createServer(async (req, res) => {
 
     // Handle health check endpoint
     if (req.url === '/health' && req.method === 'GET') {
+        logger.info('Health check endpoint called');
         try {
             // Check if the file system root directory is accessible
             await fs.access(FS_ROOT_DIR);
-            
+
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 status: 'UP',
@@ -88,7 +120,9 @@ const server = http.createServer(async (req, res) => {
                     port: PORT
                 }
             }));
+            logger.info('Health check successful');
         } catch (error) {
+            logger.error('Health check failed', { error: (error as Error).message });
             res.writeHead(503, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 status: 'DOWN',
@@ -101,12 +135,19 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.url === '/fs' && req.method === 'POST') {
+        logger.info('File system operation request received');
         try {
             let body = '';
             for await (const chunk of req) {
                 body += chunk;
             }
+            logger.debug('Request body received', { bodySize: body.length });
             const requestData: RequestModel = JSON.parse(body);
+            logger.info(`Processing ${requestData.operation} operation`, {
+                operation: requestData.operation,
+                path: requestData.path,
+                alias: requestData.alias
+            });
 
             const userRoot = FS_ROOT_DIR;
             await fs.mkdir(userRoot, { recursive: true });
@@ -115,9 +156,11 @@ const server = http.createServer(async (req, res) => {
 
             switch (requestData.operation) {
                 case 'ls': {
+                    logger.info('Listing directory contents', { path: requestData.path });
                     const targetPath = ensurePathExists(userRoot, requestData.path);
                     const stats = await fs.stat(targetPath);
                     if (!stats.isDirectory()) {
+                        logger.warn('Attempt to list non-directory path', { path: targetPath });
                         throw new Error('Path is not a directory');
                     }
                     const items = [];
@@ -132,111 +175,167 @@ const server = http.createServer(async (req, res) => {
                         });
                     }
                     responseData = { path: requestData.path, items };
+                    logger.info('Directory listing completed', { itemCount: items.length, path: requestData.path });
                     break;
                 }
                 case 'cd': {
+                    logger.info('Changing directory', { path: requestData.path });
                     const targetPath = ensurePathExists(userRoot, requestData.path);
                     const stats = await fs.stat(targetPath);
                     if (!stats.isDirectory()) {
+                        logger.warn('Attempt to change to non-directory path', { path: targetPath });
                         throw new Error('Path is not a directory');
                     }
                     responseData = { path: requestData.path };
+                    logger.info('Directory change completed', { path: requestData.path });
                     break;
                 }
                 case 'mkdir': {
+                    logger.info('Creating directory', { path: requestData.path });
                     const targetPath = ensurePathExists(userRoot, requestData.path);
                     await fs.mkdir(targetPath, { recursive: true });
                     responseData = { created: targetPath };
+                    logger.info('Directory created', { path: targetPath });
                     break;
                 }
                 case 'rmdir': {
+                    logger.info('Removing directory', { path: requestData.path });
                     const targetPath = ensurePathExists(userRoot, requestData.path);
                     await fs.rm(targetPath, { recursive: true, force: true });
                     responseData = { deleted: targetPath };
+                    logger.info('Directory removed', { path: targetPath });
                     break;
                 }
                 case 'newfile': {
                     if (!requestData.filename) {
+                        logger.warn('New file operation missing filename');
                         throw new Error('Filename is required for newfile operation');
                     }
+                    logger.info('Creating new file', { filename: requestData.filename, path: requestData.path });
                     const parentDirPath = ensurePathExists(userRoot, requestData.path);
                     await fs.mkdir(parentDirPath, { recursive: true });
                     const newFilePath = path.join(parentDirPath, requestData.filename);
                     await fs.writeFile(newFilePath, '');
                     responseData = { created_file: newFilePath };
+                    logger.info('New file created', { path: newFilePath });
                     break;
                 }
                 case 'deletefile': {
                     if (!requestData.filename) {
-                         throw new Error('Filename is required for deletefile operation');
+                        logger.warn('Delete file operation missing filename');
+                        throw new Error('Filename is required for deletefile operation');
                     }
+                    logger.info('Deleting file', { filename: requestData.filename, path: requestData.path });
                     const targetPath = ensurePathExists(userRoot, [...requestData.path, requestData.filename]);
                     await fs.unlink(targetPath);
                     responseData = { deleted_file: targetPath };
+                    logger.info('File deleted', { path: targetPath });
                     break;
                 }
                 case 'rename': {
                     if (!requestData.newName) {
+                        logger.warn('Rename operation missing new name');
                         throw new Error('New name is required for rename operation');
                     }
+                    logger.info('Renaming file/directory', {
+                        oldPath: requestData.path,
+                        newName: requestData.newName
+                    });
                     const sourcePath = ensurePathExists(userRoot, requestData.path);
                     const newPath = path.join(path.dirname(sourcePath), requestData.newName);
                     await fs.rename(sourcePath, newPath);
                     responseData = { renamed: sourcePath, to: newPath };
+                    logger.info('Rename completed', { from: sourcePath, to: newPath });
                     break;
                 }
                 case 'copy': {
+                    logger.info('Copying file/directory', {
+                        source: requestData.path,
+                        destination: requestData.toPath
+                    });
                     const sourcePath = ensurePathExists(userRoot, requestData.path);
                     const destPath = ensurePathExists(userRoot, requestData.toPath as string[]);
                     await fs.cp(sourcePath, destPath, { recursive: true });
                     responseData = { copied: sourcePath, to: destPath };
+                    logger.info('Copy completed', { from: sourcePath, to: destPath });
                     break;
                 }
                 case 'move': {
+                    logger.info('Moving file/directory', {
+                        source: requestData.path,
+                        destination: requestData.toPath
+                    });
                     const sourcePath = ensurePathExists(userRoot, requestData.path);
                     const destPath = ensurePathExists(userRoot, requestData.toPath as string[]);
                     await fs.rename(sourcePath, destPath);
                     responseData = { moved: sourcePath, to: destPath };
+                    logger.info('Move completed', { from: sourcePath, to: destPath });
                     break;
                 }
                 case 'hasfile': {
                     if (!requestData.filename) {
+                        logger.warn('HasFile operation missing filename');
                         throw new Error('Filename is required for hasfile operation');
                     }
+                    logger.info('Checking if file exists', {
+                        filename: requestData.filename,
+                        path: [...requestData.path, requestData.filename]
+                    });
                     const targetPath = ensurePathExists(userRoot, [...requestData.path, requestData.filename]);
                     try {
                         await fs.access(targetPath, fs.constants.F_OK);
                         // If access doesn't throw an error, the file exists
                         responseData = { exists: true, path: targetPath, type: 'file' };
+                        logger.info('File exists', { path: targetPath });
                     } catch {
                         // If access throws an error, the file doesn't exist
                         responseData = { exists: false, path: targetPath, type: 'file' };
+                        logger.info('File does not exist', { path: targetPath });
                     }
                     break;
                 }
                 case 'hasfolder': {
                     if (!requestData.filename) {
+                        logger.warn('HasFolder operation missing folder name');
                         throw new Error('Folder name is required for hasfolder operation');
                     }
+                    logger.info('Checking if folder exists', {
+                        folderName: requestData.filename,
+                        path: [...requestData.path, requestData.filename]
+                    });
                     const targetPath = ensurePathExists(userRoot, [...requestData.path, requestData.filename]);
                     try {
                         const stats = await fs.stat(targetPath);
                         if (stats.isDirectory()) {
                             responseData = { exists: true, path: targetPath, type: 'directory' };
+                            logger.info('Folder exists', { path: targetPath });
                         } else {
                             responseData = { exists: false, path: targetPath, type: 'directory' };
+                            logger.info('Path exists but is not a directory', { path: targetPath });
                         }
                     } catch {
                         responseData = { exists: false, path: targetPath, type: 'directory' };
+                        logger.info('Folder does not exist', { path: targetPath });
                     }
                     break;
                 }
                 default:
+                    logger.warn('Unknown operation requested', { operation: requestData.operation });
                     throw new Error(`Unknown operation: ${requestData.operation}`);
             }
+            logger.info('Request completed successfully', {
+                operation: requestData.operation,
+                responseSize: JSON.stringify(responseData).length
+            });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(responseData));
         } catch (error: any) {
+            logger.error('Request processing failed', {
+                operation: requestData?.operation,
+                error: error.message,
+                stack: error.stack
+            });
+
             let statusCode = 500;
             let message = error.message || 'Internal Server Error';
 
@@ -247,16 +346,18 @@ const server = http.createServer(async (req, res) => {
                 statusCode = 400;
             }
 
+            logger.warn('Sending error response', { statusCode, message });
             res.writeHead(statusCode, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ detail: message }));
         }
     } else {
+        logger.warn('Route not found', { method: req.method, url: req.url });
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ detail: 'Not Found' }));
     }
 });
 
 server.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
-    console.log(`File system root is ${FS_ROOT_DIR}`);
+    logger.info(`Server listening on port ${PORT}`, { port: PORT });
+    logger.info(`File system root is ${FS_ROOT_DIR}`, { fsRootDir: FS_ROOT_DIR });
 });

@@ -5,10 +5,17 @@ A Moleculer-based microservices application providing multiple search providers 
 ## Architecture
 
 ```
-Angular Client -> Spring Broker Gateway -> Service Registry -> Moleculer Search Service
-                                                              ├── Google Search
-                                                              ├── Gemini Search (future)
-                                                              └── Unsplash Search (future)
+Angular Client -> Broker Gateway -> Moleculer Search Service
+                       ↑                    ↓
+                       |              (registers with)
+                       |                    ↓
+                  Host Server ←─────────────┘
+                (Service Registry)
+                       
+Moleculer Services:
+├── Google Search
+├── Gemini Search (future)
+└── Unsplash Search (future)
 ```
 
 ## Features
@@ -32,10 +39,11 @@ HTTP gateway service using moleculer-web
 - **Endpoint**: `GET /api/health` - Health check
 
 ### registry-client
-Handles registration with Spring service-registry
-- Registers on startup
-- Periodic heartbeat re-registration
+Handles registration with Host Server
+- Registers on startup via REST API
+- Periodic heartbeat re-registration (every 30s)
 - Automatic retry on failure
+- Persistent registration in H2 database
 
 ## Setup
 
@@ -63,26 +71,33 @@ npm start
 
 ## Environment Variables
 
-- `SERVICE_REGISTRY_URL` - Spring service registry endpoint (default: http://localhost:8080/api/registry)
+- `SERVICE_REGISTRY_URL` - Host Server registry endpoint (default: http://localhost:8085/api/registry)
 - `GOOGLE_API_KEY` - Google Custom Search API key
 - `GOOGLE_SEARCH_ENGINE_ID` - Google Custom Search Engine ID
 - `SERVICE_PORT` - Port for HTTP API (default: 4050)
 - `SERVICE_HOST` - Host for service registration (default: localhost)
 
-## Integration with Spring
+## Integration with Host Server
 
-The service automatically registers with the Spring service-registry on startup:
+The service automatically registers with the Host Server on startup via REST API:
 
 ```json
 {
   "serviceName": "googleSearchService",
   "operations": ["simpleSearch"],
   "endpoint": "http://localhost:4050",
-  "healthCheck": "http://localhost:4050/api/health"
+  "healthCheck": "http://localhost:4050/api/health",
+  "framework": "Moleculer",
+  "version": "1.0.0",
+  "port": 4050,
+  "metadata": {
+    "type": "moleculer",
+    "provider": "google"
+  }
 }
 ```
 
-The Spring broker-gateway will route requests to this service based on the registered operations.
+The registration is persisted in the Host Server's H2 database. The Broker Gateway queries the Host Server to route requests to registered services.
 
 ## Adding New Search Providers
 

@@ -21,7 +21,7 @@ export default class RegistryClientService extends Service {
       name: "registry-client",
 
       settings: {
-        registryUrl: process.env.SERVICE_REGISTRY_URL || "http://localhost:8080/api/registry",
+        registryUrl: process.env.SERVICE_REGISTRY_URL || "http://localhost:8085/api/registry",
         serviceHost: process.env.SERVICE_HOST || "localhost",
         servicePort: process.env.SERVICE_PORT || 4050,
         registrationIntervalMs: 30000 // Re-register every 30 seconds
@@ -77,26 +77,33 @@ export default class RegistryClientService extends Service {
       }
     };
 
-    // Use broker protocol: ServiceRequest format
-    const serviceRequest = {
-      service: "serviceRegistry",
-      operation: "register",
-      params: {
-        registration: registration
-      }
+    // Extract port from endpoint
+    const portMatch = this.serviceEndpoint.match(/:(\d+)/);
+    const port = portMatch ? parseInt(portMatch[1]) : 4050;
+
+    // Register directly with host-server REST API
+    const registrationPayload = {
+      serviceName: registration.serviceName,
+      operations: registration.operations,
+      endpoint: registration.endpoint,
+      healthCheck: registration.healthCheck,
+      metadata: registration.metadata,
+      framework: "Moleculer",
+      version: "1.0.0",
+      port: port
     };
 
     try {
-      const response = await axios.post(`${this.registryUrl}/submitRequest`, serviceRequest, {
+      const response = await axios.post(`${this.registryUrl}/register`, registrationPayload, {
         headers: {
           "Content-Type": "application/json"
         },
         timeout: 5000
       });
 
-      this.logger.info(`Successfully registered with Spring service registry: ${response.data.data?.message || "OK"}`);
+      this.logger.info(`Successfully registered with Host Server: ${response.data.message || "OK"}`);
     } catch (error: any) {
-      this.logger.warn(`Failed to register with Spring service registry: ${error.message}`);
+      this.logger.warn(`Failed to register with Host Server: ${error.message}`);
       // Don't throw - service should continue running even if registration fails
     }
   }
