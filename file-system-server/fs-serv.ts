@@ -136,13 +136,14 @@ const server = http.createServer(async (req, res) => {
 
     if (req.url === '/fs' && req.method === 'POST') {
         logger.info('File system operation request received');
+        let requestData: RequestModel | undefined = undefined;
         try {
             let body = '';
             for await (const chunk of req) {
                 body += chunk;
             }
             logger.debug('Request body received', { bodySize: body.length });
-            const requestData: RequestModel = JSON.parse(body);
+            requestData = JSON.parse(body);
             logger.info(`Processing ${requestData.operation} operation`, {
                 operation: requestData.operation,
                 path: requestData.path,
@@ -339,7 +340,11 @@ const server = http.createServer(async (req, res) => {
             let statusCode = 500;
             let message = error.message || 'Internal Server Error';
 
-            if (error.code === 'ENOENT' || error.message.includes('not a directory')) {
+            // If JSON parsing failed, it's a bad request
+            if (error instanceof SyntaxError) {
+                statusCode = 400;
+                message = 'Invalid JSON in request body';
+            } else if (error.code === 'ENOENT' || error.message.includes('not a directory')) {
                 statusCode = 404;
                 message = 'Not Found';
             } else if (error.message.includes('required for')) {

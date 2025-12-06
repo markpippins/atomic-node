@@ -1,7 +1,12 @@
-import express, { Request, Response } from 'express';
-import cors from 'cors';
-import winston from 'winston';
+import * as express from 'express';
+import * as cors from 'cors';
+import * as winston from 'winston';
 import { BrokerProxyController } from './controllers/BrokerProxyController';
+
+// Define types for Express
+type Request = express.Request;
+type Response = express.Response;
+type NextFunction = express.NextFunction;
 
 // Configure logging
 const logger = winston.createLogger({
@@ -39,7 +44,7 @@ app.use(cors({
 app.use(express.json());
 
 // Log all incoming requests
-app.use((req: Request, res: Response, next: Function) => {
+app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
   logger.info('Incoming request', {
     method: req.method,
     url: req.url,
@@ -50,7 +55,7 @@ app.use((req: Request, res: Response, next: Function) => {
 });
 
 // Define the route for proxying requests
-app.post('/api/broker/submitRequest', async (req: Request, res: Response) => {
+app.post('/api/broker/submitRequest', async (req: express.Request, res: express.Response) => {
   logger.info('Broker proxy request received', {
     bodySize: JSON.stringify(req.body).length,
     requestId: req.body?.requestId
@@ -59,13 +64,13 @@ app.post('/api/broker/submitRequest', async (req: Request, res: Response) => {
 });
 
 // Health check endpoint
-app.get('/health', (req: Request, res: Response) => {
+app.get('/health', (req: express.Request, res: express.Response) => {
   logger.info('Health check endpoint called');
   res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
 // Handle all other routes with 404
-app.use((req: Request, res: Response) => {
+app.use((req: express.Request, res: express.Response) => {
   logger.warn('Route not found', { method: req.method, url: req.url });
   res.status(404).json({ error: 'Route not found' });
 });

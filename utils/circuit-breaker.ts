@@ -1,5 +1,6 @@
 import * as http from 'http';
 import * as https from 'https';
+import * as winston from 'winston';
 
 interface CircuitBreakerConfig {
   failureThreshold: number;
@@ -28,6 +29,28 @@ interface HealthResponse {
   error?: string;
 }
 
+// Configure logging
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    winston.format.splat(),
+    winston.format.json()
+  ),
+  defaultMeta: { service: 'circuit-breaker' },
+  transports: [
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.printf(
+          (info) => `${info.timestamp} ${info.level} [${info.service}] ${info.message}`
+        )
+      ),
+    }),
+  ],
+});
+
 class CircuitBreaker {
   private state: CircuitState = CircuitState.CLOSED;
   private failureCount: number = 0;
@@ -44,6 +67,10 @@ class CircuitBreaker {
 
     // If circuit is OPEN and reset timeout hasn't passed, return unavailable
     if (this.state === CircuitState.OPEN && now < this.nextAttemptTime) {
+      logger.debug('Circuit breaker still open', {
+        service: this.service.name,
+        nextAttemptInMs: Math.ceil((this.nextAttemptTime - now) / 1000) * 1000
+      });
       return {
         available: false,
         error: `Circuit breaker OPEN for ${this.service.name}. Next attempt in ${Math.ceil((this.nextAttemptTime - now) / 1000)}s`
@@ -53,24 +80,34 @@ class CircuitBreaker {
     // If circuit is OPEN but reset timeout has passed, move to HALF_OPEN
     if (this.state === CircuitState.OPEN && now >= this.nextAttemptTime) {
       this.state = CircuitState.HALF_OPEN;
-      console.log(`Circuit breaker for ${this.service.name} moved to HALF_OPEN state`);
+      logger.info('Circuit breaker moved to HALF_OPEN state', { service: this.service.name });
     }
 
     try {
       const response = await this.makeHealthRequest();
-      
+
       if (response.status === 'UP') {
         this.onSuccess();
+        logger.debug('Health check passed', { service: this.service.name });
         return { available: true, response };
       } else {
         this.onFailure();
+        logger.warn('Health check failed', {
+          service: this.service.name,
+          status: response.status,
+          details: response.details
+        });
         return { available: false, response, error: 'Service reported DOWN status' };
       }
     } catch (error) {
       this.onFailure();
-      return { 
-        available: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      logger.error('Health check error', {
+        service: this.service.name,
+        error: (error as Error).message
+      });
+      return {
+        available: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
   }
@@ -112,7 +149,7 @@ class CircuitBreaker {
     this.failureCount = 0;
     if (this.state === CircuitState.HALF_OPEN) {
       this.state = CircuitState.CLOSED;
-      console.log(`Circuit breaker for ${this.service.name} moved to CLOSED state`);
+      logger.info('Circuit breaker moved to CLOSED state', { service: this.service.name });
     }
   }
 
@@ -123,7 +160,11 @@ class CircuitBreaker {
     if (this.failureCount >= this.config.failureThreshold) {
       this.state = CircuitState.OPEN;
       this.nextAttemptTime = Date.now() + this.config.resetTimeout;
-      console.log(`Circuit breaker for ${this.service.name} moved to OPEN state`);
+      logger.warn('Circuit breaker moved to OPEN state', {
+        service: this.service.name,
+        failureCount: this.failureCount,
+        resetTimeoutMs: this.config.resetTimeout
+      });
     }
   }
 
@@ -205,19 +246,27 @@ class HealthMonitor {
   }
 
   startMonitoring(): void {
-    console.log('Starting health monitoring...');
-    
+    logger.info('Starting health monitoring...');
+
     setInterval(async () => {
       const results = await this.checkAllServices();
-      
-      console.log('\n=== Health Check Results ===');
+
+      logger.info('Health check results', { timestamp: new Date().toISOString() });
       for (const [serviceName, result] of results) {
-        const status = result.available ? '✅ UP' : '❌ DOWN';
+        const status = result.available ? 'UP' : 'DOWN';
         const circuit = result.circuitState;
-        console.log(`${serviceName}: ${status} [Circuit: ${circuit}]`);
-        
+        logger.info('Service status', {
+          service: serviceName,
+          status,
+          circuitState: circuit,
+          failureCount: result.failureCount
+        });
+
         if (!result.available && result.error) {
-          console.log(`  Error: ${result.error}`);
+          logger.error('Service error details', {
+            service: serviceName,
+            error: result.error
+          });
         }
       }
     }, CIRCUIT_BREAKER_CONFIG.monitoringPeriod);
@@ -230,15 +279,17 @@ export { HealthMonitor, CircuitBreaker, CircuitState };
 // CLI usage
 if (require.main === module) {
   const monitor = new HealthMonitor();
-  
+
   // Check all services once
   monitor.checkAllServices().then(results => {
-    console.log('Initial health check results:');
+    logger.info('Initial health check results:', { timestamp: new Date().toISOString() });
     for (const [serviceName, result] of results) {
-      console.log(`${serviceName}:`, result);
+      logger.info('Service result', { service: serviceName, result });
     }
-    
+
     // Start continuous monitoring
     monitor.startMonitoring();
+  }).catch(error => {
+    logger.error('Failed to perform initial health check', { error: error.message });
   });
 }

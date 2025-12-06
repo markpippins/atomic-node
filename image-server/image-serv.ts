@@ -10,6 +10,29 @@ import * as url from 'url';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
+import * as winston from 'winston';
+
+// Configure logging
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    winston.format.splat(),
+    winston.format.json()
+  ),
+  defaultMeta: { service: 'image-server' },
+  transports: [
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.printf(
+          (info) => `${info.timestamp} ${info.level} [${info.service}] ${info.message}`
+        )
+      ),
+    }),
+  ],
+});
 
 // Load environment variables from .env file
 dotenv.config();
@@ -72,15 +95,16 @@ const serveStaticFile = async (baseName: string, res: http.ServerResponse, searc
         const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
         const fileContent = await fs.readFile(filePath);
-        res.writeHead(200, { 
+        res.writeHead(200, {
           'Content-Type': contentType,
           'Content-Length': fileContent.length,
           'Cache-Control': 'public, max-age=3600' // Cache for 1 hour
         });
         res.end(fileContent);
+        logger.info('File served successfully', { filePath });
         return true; // File found and served
       } catch (error) {
-        console.error(`Error serving file ${filePath}:`, error);
+        logger.debug(`File not found or inaccessible`, { filePath, error: (error as Error).message });
         // Continue to try next location
       }
     }
@@ -96,15 +120,16 @@ const serveStaticFile = async (baseName: string, res: http.ServerResponse, searc
           const fileContent = await fs.readFile(filePath);
           const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
-          res.writeHead(200, { 
+          res.writeHead(200, {
             'Content-Type': contentType,
             'Content-Length': fileContent.length,
             'Cache-Control': 'public, max-age=3600' // Cache for 1 hour
           });
           res.end(fileContent);
+          logger.info('File served successfully', { filePath });
           return true; // File found and served
         } catch (error) {
-          console.error(`Error serving file ${filePath}:`, error);
+          logger.debug(`File not found or inaccessible`, { filePath, error: (error as Error).message });
           // Continue to try next extension/location
         }
       }
@@ -114,8 +139,13 @@ const serveStaticFile = async (baseName: string, res: http.ServerResponse, searc
 };
 
 const server = http.createServer(async (req, res) => {
-  console.log(`[${new Date().toISOString()}] Request: ${req.method} ${req.url}`);
-  
+  // Log incoming requests
+  logger.info(`Incoming request`, {
+    method: req.method,
+    url: req.url,
+    headers: req.headers
+  });
+
   // CORS headers - IMPORTANT: Set these for all responses, including errors
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -125,6 +155,7 @@ const server = http.createServer(async (req, res) => {
 
   // Handle preflight OPTIONS request
   if (req.method === 'OPTIONS') {
+    logger.debug('Handling CORS preflight request');
     res.writeHead(204); // No content
     res.end();
     return;
@@ -135,10 +166,11 @@ const server = http.createServer(async (req, res) => {
 
   // Handle health check endpoint
   if (req.url === '/health' && req.method === 'GET') {
+    logger.info('Health check endpoint called');
     try {
       // Check if the image root directory is accessible
       await fs.access(IMAGE_ROOT_DIR);
-      
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         status: 'UP',
@@ -150,7 +182,9 @@ const server = http.createServer(async (req, res) => {
           searchLocations: FOLDER_LOCATIONS.length
         }
       }));
+      logger.info('Health check successful');
     } catch (error) {
+      logger.error('Health check failed', { error: (error as Error).message });
       res.writeHead(503, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         status: 'DOWN',
@@ -202,18 +236,24 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (!fileServed) {
+      logger.warn('File not found', { path: req.url });
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not Found', path: req.url }));
+    } else {
+      logger.info('Request processed successfully', { path: req.url });
     }
   } catch (e) {
-    console.error('Error processing request:', e);
+    logger.error('Error processing request:', { error: (e as Error).message, stack: (e as Error).stack });
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Server Error', message: (e as Error).message }));
   }
 });
 
 server.listen(PORT, () => {
-  console.log(`Image server listening on http://localhost:${PORT}`);
-  console.log(`Serving static images from: ${IMAGE_ROOT_DIR}`);
-  console.log(`Additional search locations: ${FOLDER_LOCATIONS.slice(1).join(', ') || 'none'}`);
+  logger.info(`Server listening on port ${PORT}`, { port: PORT });
+  logger.info(`Serving static images from: ${IMAGE_ROOT_DIR}`, { imageRootDir: IMAGE_ROOT_DIR });
+  logger.info(`Additional search locations: ${FOLDER_LOCATIONS.slice(1).join(', ') || 'none'}`, {
+    searchLocationsCount: FOLDER_LOCATIONS.length - 1,
+    searchLocations: FOLDER_LOCATIONS.slice(1)
+  });
 });

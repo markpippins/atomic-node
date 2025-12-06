@@ -1,23 +1,19 @@
 {
-  "name": "image-server",
+  "name": "utils",
   "version": "1.0.0",
-  "description": "",
+  "description": "Utility functions for the atomic project",
   "main": "index.js",
   "scripts": {
-    "start": "npx tsx image-serv.ts",
-    "dev": "npx tsx --watch image-serv.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "dotenv": "^17.2.3",
-    "typescript": "^5.9.3",
     "winston": "^3.11.0"
   },
   "devDependencies": {
-    "@types/node": "^24.10.0",
-    "tsx": "^4.0.0"
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
   }
 }

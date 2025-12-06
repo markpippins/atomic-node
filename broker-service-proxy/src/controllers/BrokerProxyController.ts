@@ -1,5 +1,5 @@
 import axios from 'axios'
-import winston from 'winston';
+import * as winston from 'winston';
 
 interface ServiceRequest {
   service: string
