@@ -1,6 +1,6 @@
 // broker-client.js
 
-const BROKER_URL = 'http://localhost:8080/api/broker/submitRequest';
+const BROKER_URL = 'http://172.16.30.48:8080/api/broker/submitRequest';
 
 /**
  * Generates a UUID.
