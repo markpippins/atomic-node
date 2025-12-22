@@ -83,7 +83,7 @@ The service automatically registers with the Host Server on startup via REST API
 
 ```json
 {
-  "serviceName": "googleSearchService",
+  "serviceName": "moleculer-search",
   "operations": ["simpleSearch"],
   "endpoint": "http://localhost:4050",
   "healthCheck": "http://localhost:4050/api/health",
