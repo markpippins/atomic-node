@@ -157,16 +157,16 @@ const server = http.createServer(async (req, res) => {
 
             switch (requestData.operation) {
                 case 'ls': {
-                    logger.info('Listing directory contents', { path: requestData.path });
-                    const targetPath = ensurePathExists(userRoot, requestData.path);
-                    const stats = await fs.stat(targetPath);
+                    const fullPath = ensurePathExists(userRoot, requestData.path);
+                    logger.info('Listing directory contents', { path: requestData.path, fullPath });
+                    const stats = await fs.stat(fullPath);
                     if (!stats.isDirectory()) {
-                        logger.warn('Attempt to list non-directory path', { path: targetPath });
+                        logger.warn('Attempt to list non-directory path', { path: requestData.path, fullPath });
                         throw new Error('Path is not a directory');
                     }
                     const items = [];
-                    for (const itemName of await fs.readdir(targetPath)) {
-                        const itemPath = path.join(targetPath, itemName);
+                    for (const itemName of await fs.readdir(fullPath)) {
+                        const itemPath = path.join(fullPath, itemName);
                         const itemStats = await fs.stat(itemPath);
                         items.push({
                             name: itemName,
@@ -176,35 +176,35 @@ const server = http.createServer(async (req, res) => {
                         });
                     }
                     responseData = { path: requestData.path, items };
-                    logger.info('Directory listing completed', { itemCount: items.length, path: requestData.path });
+                    logger.info('Directory listing completed', { itemCount: items.length, path: requestData.path, fullPath });
                     break;
                 }
                 case 'cd': {
-                    logger.info('Changing directory', { path: requestData.path });
-                    const targetPath = ensurePathExists(userRoot, requestData.path);
-                    const stats = await fs.stat(targetPath);
+                    const fullPath = ensurePathExists(userRoot, requestData.path);
+                    logger.info('Changing directory', { path: requestData.path, fullPath });
+                    const stats = await fs.stat(fullPath);
                     if (!stats.isDirectory()) {
-                        logger.warn('Attempt to change to non-directory path', { path: targetPath });
+                        logger.warn('Attempt to change to non-directory path', { path: requestData.path, fullPath });
                         throw new Error('Path is not a directory');
                     }
                     responseData = { path: requestData.path };
-                    logger.info('Directory change completed', { path: requestData.path });
+                    logger.info('Directory change completed', { path: requestData.path, fullPath });
                     break;
                 }
                 case 'mkdir': {
-                    logger.info('Creating directory', { path: requestData.path });
-                    const targetPath = ensurePathExists(userRoot, requestData.path);
-                    await fs.mkdir(targetPath, { recursive: true });
-                    responseData = { created: targetPath };
-                    logger.info('Directory created', { path: targetPath });
+                    const fullPath = ensurePathExists(userRoot, requestData.path);
+                    logger.info('Creating directory', { path: requestData.path, fullPath });
+                    await fs.mkdir(fullPath, { recursive: true });
+                    responseData = { created: fullPath };
+                    logger.info('Directory created', { path: fullPath });
                     break;
                 }
                 case 'rmdir': {
-                    logger.info('Removing directory', { path: requestData.path });
-                    const targetPath = ensurePathExists(userRoot, requestData.path);
-                    await fs.rm(targetPath, { recursive: true, force: true });
-                    responseData = { deleted: targetPath };
-                    logger.info('Directory removed', { path: targetPath });
+                    const fullPath = ensurePathExists(userRoot, requestData.path);
+                    logger.info('Removing directory', { path: requestData.path, fullPath });
+                    await fs.rm(fullPath, { recursive: true, force: true });
+                    responseData = { deleted: fullPath };
+                    logger.info('Directory removed', { path: fullPath });
                     break;
                 }
                 case 'newfile': {
@@ -212,10 +212,10 @@ const server = http.createServer(async (req, res) => {
                         logger.warn('New file operation missing filename');
                         throw new Error('Filename is required for newfile operation');
                     }
-                    logger.info('Creating new file', { filename: requestData.filename, path: requestData.path });
                     const parentDirPath = ensurePathExists(userRoot, requestData.path);
-                    await fs.mkdir(parentDirPath, { recursive: true });
                     const newFilePath = path.join(parentDirPath, requestData.filename);
+                    logger.info('Creating new file', { filename: requestData.filename, path: requestData.path, newFilePath });
+                    await fs.mkdir(parentDirPath, { recursive: true });
                     await fs.writeFile(newFilePath, '');
                     responseData = { created_file: newFilePath };
                     logger.info('New file created', { path: newFilePath });
@@ -226,11 +226,11 @@ const server = http.createServer(async (req, res) => {
                         logger.warn('Delete file operation missing filename');
                         throw new Error('Filename is required for deletefile operation');
                     }
-                    logger.info('Deleting file', { filename: requestData.filename, path: requestData.path });
-                    const targetPath = ensurePathExists(userRoot, [...requestData.path, requestData.filename]);
-                    await fs.unlink(targetPath);
-                    responseData = { deleted_file: targetPath };
-                    logger.info('File deleted', { path: targetPath });
+                    const fullPath = ensurePathExists(userRoot, [...requestData.path, requestData.filename]);
+                    logger.info('Deleting file', { filename: requestData.filename, path: requestData.path, fullPath });
+                    await fs.unlink(fullPath);
+                    responseData = { deleted_file: fullPath };
+                    logger.info('File deleted', { path: fullPath });
                     break;
                 }
                 case 'rename': {
@@ -238,36 +238,42 @@ const server = http.createServer(async (req, res) => {
                         logger.warn('Rename operation missing new name');
                         throw new Error('New name is required for rename operation');
                     }
-                    logger.info('Renaming file/directory', {
-                        oldPath: requestData.path,
-                        newName: requestData.newName
-                    });
                     const sourcePath = ensurePathExists(userRoot, requestData.path);
                     const newPath = path.join(path.dirname(sourcePath), requestData.newName);
+                    logger.info('Renaming file/directory', {
+                        oldPath: requestData.path,
+                        newName: requestData.newName,
+                        sourcePath,
+                        newPath
+                    });
                     await fs.rename(sourcePath, newPath);
                     responseData = { renamed: sourcePath, to: newPath };
                     logger.info('Rename completed', { from: sourcePath, to: newPath });
                     break;
                 }
                 case 'copy': {
-                    logger.info('Copying file/directory', {
-                        source: requestData.path,
-                        destination: requestData.toPath
-                    });
                     const sourcePath = ensurePathExists(userRoot, requestData.path);
                     const destPath = ensurePathExists(userRoot, requestData.toPath as string[]);
+                    logger.info('Copying file/directory', {
+                        source: requestData.path,
+                        destination: requestData.toPath,
+                        sourcePath,
+                        destPath
+                    });
                     await fs.cp(sourcePath, destPath, { recursive: true });
                     responseData = { copied: sourcePath, to: destPath };
                     logger.info('Copy completed', { from: sourcePath, to: destPath });
                     break;
                 }
                 case 'move': {
-                    logger.info('Moving file/directory', {
-                        source: requestData.path,
-                        destination: requestData.toPath
-                    });
                     const sourcePath = ensurePathExists(userRoot, requestData.path);
                     const destPath = ensurePathExists(userRoot, requestData.toPath as string[]);
+                    logger.info('Moving file/directory', {
+                        source: requestData.path,
+                        destination: requestData.toPath,
+                        sourcePath,
+                        destPath
+                    });
                     await fs.rename(sourcePath, destPath);
                     responseData = { moved: sourcePath, to: destPath };
                     logger.info('Move completed', { from: sourcePath, to: destPath });
@@ -278,20 +284,21 @@ const server = http.createServer(async (req, res) => {
                         logger.warn('HasFile operation missing filename');
                         throw new Error('Filename is required for hasfile operation');
                     }
+                    const fullPath = ensurePathExists(userRoot, [...requestData.path, requestData.filename]);
                     logger.info('Checking if file exists', {
                         filename: requestData.filename,
-                        path: [...requestData.path, requestData.filename]
+                        path: [...requestData.path, requestData.filename],
+                        fullPath
                     });
-                    const targetPath = ensurePathExists(userRoot, [...requestData.path, requestData.filename]);
                     try {
-                        await fs.access(targetPath, fs.constants.F_OK);
+                        await fs.access(fullPath, fs.constants.F_OK);
                         // If access doesn't throw an error, the file exists
-                        responseData = { exists: true, path: targetPath, type: 'file' };
-                        logger.info('File exists', { path: targetPath });
+                        responseData = { exists: true, path: fullPath, type: 'file' };
+                        logger.info('File exists', { path: fullPath });
                     } catch {
                         // If access throws an error, the file doesn't exist
-                        responseData = { exists: false, path: targetPath, type: 'file' };
-                        logger.info('File does not exist', { path: targetPath });
+                        responseData = { exists: false, path: fullPath, type: 'file' };
+                        logger.info('File does not exist', { path: fullPath });
                     }
                     break;
                 }
@@ -300,23 +307,24 @@ const server = http.createServer(async (req, res) => {
                         logger.warn('HasFolder operation missing folder name');
                         throw new Error('Folder name is required for hasfolder operation');
                     }
+                    const fullPath = ensurePathExists(userRoot, [...requestData.path, requestData.filename]);
                     logger.info('Checking if folder exists', {
                         folderName: requestData.filename,
-                        path: [...requestData.path, requestData.filename]
+                        path: [...requestData.path, requestData.filename],
+                        fullPath
                     });
-                    const targetPath = ensurePathExists(userRoot, [...requestData.path, requestData.filename]);
                     try {
-                        const stats = await fs.stat(targetPath);
+                        const stats = await fs.stat(fullPath);
                         if (stats.isDirectory()) {
-                            responseData = { exists: true, path: targetPath, type: 'directory' };
-                            logger.info('Folder exists', { path: targetPath });
+                            responseData = { exists: true, path: fullPath, type: 'directory' };
+                            logger.info('Folder exists', { path: fullPath });
                         } else {
-                            responseData = { exists: false, path: targetPath, type: 'directory' };
-                            logger.info('Path exists but is not a directory', { path: targetPath });
+                            responseData = { exists: false, path: fullPath, type: 'directory' };
+                            logger.info('Path exists but is not a directory', { path: fullPath });
                         }
                     } catch {
-                        responseData = { exists: false, path: targetPath, type: 'directory' };
-                        logger.info('Folder does not exist', { path: targetPath });
+                        responseData = { exists: false, path: fullPath, type: 'directory' };
+                        logger.info('Folder does not exist', { path: fullPath });
                     }
                     break;
                 }
@@ -363,6 +371,12 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-    logger.info(`Server listening on port ${PORT}`, { port: PORT });
+    logger.info(`Server listening on port ${PORT}`, { port: PORT, host: '0.0.0.0' });
     logger.info(`File system root is ${FS_ROOT_DIR}`, { fsRootDir: FS_ROOT_DIR });
+    logger.info('File system server started successfully', {
+        port: PORT,
+        fsRootDir: FS_ROOT_DIR,
+        cliOverride: !!cliRootArg,
+        effectiveRoot: effectiveRoot
+    });
 });

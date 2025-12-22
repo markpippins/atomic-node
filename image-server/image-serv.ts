@@ -101,10 +101,10 @@ const serveStaticFile = async (baseName: string, res: http.ServerResponse, searc
           'Cache-Control': 'public, max-age=3600' // Cache for 1 hour
         });
         res.end(fileContent);
-        logger.info('File served successfully', { filePath });
+        logger.info('File served successfully', { baseName, filePath, location });
         return true; // File found and served
       } catch (error) {
-        logger.debug(`File not found or inaccessible`, { filePath, error: (error as Error).message });
+        logger.debug(`File not found or inaccessible`, { baseName, filePath, location, error: (error as Error).message });
         // Continue to try next location
       }
     }
@@ -126,10 +126,10 @@ const serveStaticFile = async (baseName: string, res: http.ServerResponse, searc
             'Cache-Control': 'public, max-age=3600' // Cache for 1 hour
           });
           res.end(fileContent);
-          logger.info('File served successfully', { filePath });
+          logger.info('File served successfully', { fileName, filePath, location, ext });
           return true; // File found and served
         } catch (error) {
-          logger.debug(`File not found or inaccessible`, { filePath, error: (error as Error).message });
+          logger.debug(`File not found or inaccessible`, { fileName, filePath, location, ext, error: (error as Error).message });
           // Continue to try next extension/location
         }
       }
@@ -218,42 +218,54 @@ const server = http.createServer(async (req, res) => {
         const isAllowed = UI_ICON_NAMES.some(n => n.toLowerCase() === lowerCaseName);
 
         if (isAllowed) {
+          logger.info('UI icon requested', { name, lowerCaseName });
           // For UI route, also search through all folder locations
           // Try looking for the file directly or in ui subfolder
           fileServed = await serveStaticFile(lowerCaseName, res, FOLDER_LOCATIONS);
+        } else {
+          logger.info('UI icon not in allowed list', { name, lowerCaseName, allowedIcons: UI_ICON_NAMES });
         }
       } else if (endpoint === 'name') {
         const name = decodeURIComponent(params[0] || '').toLowerCase();
+        logger.info('Name-based file requested', { name });
         fileServed = await serveStaticFile(name, res);
       } else if (endpoint === 'ext') {
         const ext = decodeURIComponent(params[0] || '').toLowerCase();
+        logger.info('Extension-based file requested', { ext });
         fileServed = await serveStaticFile(ext, res);
       } else {
         // Default route - treat the entire path as a filename and search through all folder locations
         const filePath = pathParts.join('/');
+        logger.info('Direct path file requested', { filePath });
         fileServed = await serveStaticFile(filePath, res, FOLDER_LOCATIONS);
       }
     }
 
     if (!fileServed) {
-      logger.warn('File not found', { path: req.url });
+      logger.warn('File not found', { path: req.url, pathParts, endpoint: pathParts[0], params: pathParts.slice(1) });
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not Found', path: req.url }));
     } else {
-      logger.info('Request processed successfully', { path: req.url });
+      logger.info('Request processed successfully', { path: req.url, pathParts, endpoint: pathParts[0], params: pathParts.slice(1) });
     }
   } catch (e) {
-    logger.error('Error processing request:', { error: (e as Error).message, stack: (e as Error).stack });
+    logger.error('Error processing request:', { error: (e as Error).message, stack: (e as Error).stack, path: req.url, pathParts, endpoint: pathParts[0], params: pathParts.slice(1) });
     res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Server Error', message: (e as Error).message }));
   }
 });
 
 server.listen(PORT, () => {
-  logger.info(`Server listening on port ${PORT}`, { port: PORT });
+  logger.info(`Server listening on port ${PORT}`, { port: PORT, host: '0.0.0.0' });
   logger.info(`Serving static images from: ${IMAGE_ROOT_DIR}`, { imageRootDir: IMAGE_ROOT_DIR });
   logger.info(`Additional search locations: ${FOLDER_LOCATIONS.slice(1).join(', ') || 'none'}`, {
     searchLocationsCount: FOLDER_LOCATIONS.length - 1,
     searchLocations: FOLDER_LOCATIONS.slice(1)
+  });
+  logger.info('Image server started successfully', {
+    port: PORT,
+    imageRootDir: IMAGE_ROOT_DIR,
+    totalSearchLocations: FOLDER_LOCATIONS.length,
+    preferredExtensions: PREFERRED_EXTENSIONS
   });
 });
