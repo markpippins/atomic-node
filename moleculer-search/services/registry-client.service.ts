@@ -66,7 +66,7 @@ export default class RegistryClientService extends Service {
 
   async registerWithSpring(): Promise<void> {
     const registration: ServiceRegistration = {
-      serviceName: "moleculer-search-service",
+      serviceName: "moleculer-search",
       operations: ["simpleSearch"],
       endpoint: this.serviceEndpoint,
       healthCheck: `${this.serviceEndpoint}/api/health`,
