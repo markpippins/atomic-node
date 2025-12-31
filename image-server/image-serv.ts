@@ -82,7 +82,7 @@ const MIME_TYPES: Record<string, string> = {
 const serveStaticFile = async (baseName: string, res: http.ServerResponse, searchLocations: string[] = [IMAGE_ROOT_DIR]): Promise<boolean> => {
   // Check if the basename already has an extension
   const hasExtension = PREFERRED_EXTENSIONS.some(ext => baseName.toLowerCase().endsWith(ext));
-  
+
   if (hasExtension) {
     // If it already has an extension, look for that specific file
     for (const location of searchLocations) {
@@ -101,7 +101,7 @@ const serveStaticFile = async (baseName: string, res: http.ServerResponse, searc
           'Cache-Control': 'public, max-age=3600' // Cache for 1 hour
         });
         res.end(fileContent);
-        logger.info('File served successfully', { filePath });
+        logger.info('File served successfully', { filePath, requestedName: baseName });
         return true; // File found and served
       } catch (error) {
         logger.debug(`File not found or inaccessible`, { filePath, error: (error as Error).message });
@@ -126,7 +126,7 @@ const serveStaticFile = async (baseName: string, res: http.ServerResponse, searc
             'Cache-Control': 'public, max-age=3600' // Cache for 1 hour
           });
           res.end(fileContent);
-          logger.info('File served successfully', { filePath });
+          logger.info('File served successfully', { filePath, requestedName: baseName });
           return true; // File found and served
         } catch (error) {
           logger.debug(`File not found or inaccessible`, { filePath, error: (error as Error).message });
@@ -207,15 +207,17 @@ const server = http.createServer(async (req, res) => {
 
   try {
     let fileServed = false;
-    
+
     if (pathParts.length > 0) {
       const [endpoint, ...params] = pathParts;
-      
+
       // Check if this is a special endpoint (ui, name, ext)
       if (endpoint === 'ui') {
         const name = decodeURIComponent(params[0] || '');
         const lowerCaseName = name.toLowerCase();
         const isAllowed = UI_ICON_NAMES.some(n => n.toLowerCase() === lowerCaseName);
+
+        logger.info('Searching UI folder', { requestedName: name });
 
         if (isAllowed) {
           // For UI route, also search through all folder locations
@@ -223,14 +225,18 @@ const server = http.createServer(async (req, res) => {
           fileServed = await serveStaticFile(lowerCaseName, res, FOLDER_LOCATIONS);
         }
       } else if (endpoint === 'name') {
-        const name = decodeURIComponent(params[0] || '').toLowerCase();
-        fileServed = await serveStaticFile(name, res);
+        const name = decodeURIComponent(params[0] || '');
+        logger.info('Searching name folder', { requestedName: name });
+        const lowerCaseName = name.toLowerCase();
+        fileServed = await serveStaticFile(lowerCaseName, res);
       } else if (endpoint === 'ext') {
-        const ext = decodeURIComponent(params[0] || '').toLowerCase();
+        const ext = decodeURIComponent(params[0] || '');
+        logger.info('Searching ext folder', { requestedExtension: ext });
         fileServed = await serveStaticFile(ext, res);
       } else {
-        // Default route - treat the entire path as a filename and search through all folder locations
         const filePath = pathParts.join('/');
+        logger.info('Default Search', { requestedPath: filePath });
+        // Default route - treat the entire path as a filename and search through all folder locations
         fileServed = await serveStaticFile(filePath, res, FOLDER_LOCATIONS);
       }
     }
