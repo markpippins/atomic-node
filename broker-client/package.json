@@ -1,0 +1,33 @@
+{
+  "name": "@atomic-broker/nodejs-sdk",
+  "version": "1.0.0",
+  "description": "Lightweight Node.js client for Atomic Broker Gateway",
+  "main": "atomic_broker_sdk.js",
+  "keywords": [
+    "broker",
+    "gateway", 
+    "microservices",
+    "sdk",
+    "javascript",
+    "nodejs"
+  ],
+  "author": "Atomic Broker Team",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/atomic/broker-sdk.git"
+  },
+  "scripts": {
+    "test": "node atomic_broker_sdk.js",
+    "example": "node atomic_broker_sdk.js"
+  },
+  "main": "atomic_broker_sdk.js",
+  "readme": "README.md",
+  "license": "MIT"
+}
