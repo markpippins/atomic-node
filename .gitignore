@@ -11761,3 +11761,9 @@ broker-service-proxy/.env.local
 image-server/.env.local
 moleculer-search/.env.example
 .gitignore
+broker-service-proxy/.env.local
+image-server/.env.local
+moleculer-search/.env.example
+broker-service-proxy/.env.local
+image-server/.env.local
+moleculer-search/.env.example

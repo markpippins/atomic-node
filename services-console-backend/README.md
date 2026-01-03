@@ -14,7 +14,7 @@ Node.js REST API backend for the Services Console application, built with Expres
 
 ## 📋 API Endpoints
 
-### Base URL: `http://localhost:3001/api`
+### Base URL: `http://localhost:6001/api`
 
 ### Core Entities
 - `GET/POST /languages` - Languages catalog
@@ -85,7 +85,7 @@ npm run db:seed
 npm run dev
 ```
 
-Server will start at `http://localhost:3001`
+Server will start at `http://localhost:6001`
 
 ## 📊 Database Schema
 
@@ -133,12 +133,12 @@ npm run db:seed
 
 ### Get all servers with related data
 ```bash
-curl http://localhost:3001/api/servers
+curl http://localhost:6001/api/servers
 ```
 
 ### Create new service
 ```bash
-curl -X POST http://localhost:3001/api/services \
+curl -X POST http://localhost:6001/api/services \
   -H "Content-Type: application/json" \
   -d '{
     "name": "User Service",
@@ -154,7 +154,7 @@ curl -X POST http://localhost:3001/api/services \
 
 ### Update server
 ```bash
-curl -X PUT http://localhost:3001/api/servers/srv_01 \
+curl -X PUT http://localhost:6001/api/servers/srv_01 \
   -H "Content-Type: application/json" \
   -d '{
     "status": "Maintenance",
