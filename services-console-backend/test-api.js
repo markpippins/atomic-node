@@ -2,7 +2,7 @@
 
 const http = require('http');
 
-const BASE_URL = 'http://localhost:3001/api';
+const BASE_URL = 'http://localhost:6001/api';
 
 const endpoints = [
   '/health',
@@ -24,7 +24,7 @@ const endpoints = [
 
 function testEndpoint(endpoint) {
   return new Promise((resolve, reject) => {
-    const url = endpoint === '/health' ? `http://localhost:3001${endpoint}` : `${BASE_URL}${endpoint}`;
+    const url = endpoint === '/health' ? `http://localhost:6001${endpoint}` : `${BASE_URL}${endpoint}`;
     
     const req = http.get(url, (res) => {
       let data = '';
