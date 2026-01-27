@@ -13589,3 +13589,12 @@ broker-gateway-proxy/node_modules/yn/lenient.js
 broker-gateway-proxy/node_modules/yn/license
 broker-gateway-proxy/node_modules/yn/package.json
 broker-gateway-proxy/node_modules/yn/readme.md
+broker-gateway-proxy/build/server.js
+broker-gateway-proxy/build/controllers/BrokerProxyController.js
+broker-gateway-proxy/.env.example
+broker-gateway-proxy/.env.local
+broker-gateway-proxy/bun.lock
+broker-gateway-proxy/package-lock.json
+image-server/.env.local
+image-server/.env.local
+image-server/.env.local

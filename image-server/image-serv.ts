@@ -37,7 +37,7 @@ const logger = winston.createLogger({
 // Load environment variables from .env file
 dotenv.config();
 
-const PORT = process.env.IMAGE_SERVER_PORT || 8081;
+const PORT = process.env.IMAGE_SERVER_PORT || 9081;
 
 // --- NEW: Allow command-line override for image root directory ---
 // Usage: node serv/image-serv.js [imageRootDir]
