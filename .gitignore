@@ -13600,3 +13600,6 @@ image-server/.env.local
 image-server/.env.local
 image-server/.env.local
 image-server/.env.local
+broker-gateway-proxy/log/run.log
+image-server/log/run.log
+file-system-server/log/run.log
